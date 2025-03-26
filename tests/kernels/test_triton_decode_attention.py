@@ -2,6 +2,7 @@
 
 import pytest
 import torch
+import torch_npu
 
 from vllm.attention.ops.triton_decode_attention import decode_attention_fwd
 
@@ -29,31 +30,31 @@ def test_decode_attention(B, L, H_Q, H_KV, D_QK, D_V, CACHE_SIZE, PAGE_SIZE):
     req_to_page = torch.randint(0,
                                 CACHE_SIZE // PAGE_SIZE,
                                 (B, num_pages_per_batch, 1),
-                                device="cuda")
+                                device="npu")
     req_to_token = req_to_page * PAGE_SIZE
     req_to_token = req_to_token.expand(B, num_pages_per_batch, PAGE_SIZE)
-    req_to_token = req_to_token + torch.arange(PAGE_SIZE, device="cuda").view(
+    req_to_token = req_to_token + torch.arange(PAGE_SIZE, device="npu").view(
         1, 1, -1)
     req_to_token = req_to_token.view(B, -1)
     req_to_token = req_to_token[:, :seq_len].contiguous()
 
     # q represents the new token being generated, one per batch
-    q = torch.randn(B, H_Q, D_QK, dtype=dtype, device="cuda")
+    q = torch.randn(B, H_Q, D_QK, dtype=dtype, device="npu")
 
     # k_buffer and v_buffer represent all previous tokens
     # Page size is 1.
-    k_buffer = torch.randn(CACHE_SIZE, H_KV, D_QK, dtype=dtype, device="cuda")
-    v_buffer = torch.randn(CACHE_SIZE, H_KV, D_V, dtype=dtype, device="cuda")
+    k_buffer = torch.randn(CACHE_SIZE, H_KV, D_QK, dtype=dtype, device="npu")
+    v_buffer = torch.randn(CACHE_SIZE, H_KV, D_V, dtype=dtype, device="npu")
 
     # o will have the same shape as q
-    o = torch.zeros(B, H_Q, D_V, dtype=dtype, device="cuda")
+    o = torch.zeros(B, H_Q, D_V, dtype=dtype, device="npu")
 
-    b_seq_len = torch.full((B, ), seq_len, device="cuda")
+    b_seq_len = torch.full((B, ), seq_len, device="npu")
 
     attn_logits = torch.empty(
         (B, H_Q, num_kv_splits, D_V + 1),
         dtype=torch.float32,
-        device="cuda",
+        device="npu",
     )
 
     # Call the original implementation.

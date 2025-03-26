@@ -8,10 +8,11 @@ from typing import Optional
 
 import pytest
 import torch
+import torch_npu
 
 from vllm.platforms import current_platform
 
-device = "cuda"
+device = "npu"
 
 
 def scaled_mm_torch(a: torch.Tensor,

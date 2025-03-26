@@ -7,6 +7,7 @@ from collections.abc import Callable
 
 import pytest
 import torch
+import torch_npu
 from xformers import ops as xops
 from xformers.ops.fmha.attn_bias import BlockDiagonalCausalFromBottomRightMask
 
@@ -22,7 +23,7 @@ NUM_QUERIES_PER_KV = [1, 8, 64]
 HEAD_SIZES = [128, 96, 24]
 DTYPES = [torch.float16]
 CUDA_DEVICES = [
-    f"cuda:{i}" for i in range(1 if torch.cuda.device_count() == 1 else 2)
+    f"npu:{i}" for i in range(1 if torch.npu.device_count() == 1 else 2)
 ]
 SLIDING_WINDOW = [0, 16, 64, 128, 256, 512, 2048]
 KV_CACHE_DTYPES = ["auto", "fp8", "fp8_e5m2"]
@@ -63,7 +64,7 @@ def test_contexted_kv_attention(
     # for GPU 1 would run on both GPU0 and GPU1 and things would hang
     #
     # see also similar issue: https://github.com/Dao-AILab/flash-attention/issues/523
-    torch.cuda.set_device(device)
+    torch.npu.set_device(device)
 
     MAX_SEQ_LEN = 1024
     MAX_CTX_LEN = 1024
@@ -168,7 +169,7 @@ def test_contexted_kv_attention(
        k_scale,
        v_scale,
        sliding_window=sliding_window)
-    torch.cuda.synchronize()
+    torch.npu.synchronize()
     start_time = time.time()
     op(query,
        k,
@@ -184,7 +185,7 @@ def test_contexted_kv_attention(
        k_scale,
        v_scale,
        sliding_window=sliding_window)
-    torch.cuda.synchronize()
+    torch.npu.synchronize()
     end_time = time.time()
     print(f"triton Time: {(end_time - start_time)*1000:.2f} ms")
 
@@ -223,7 +224,7 @@ def test_contexted_kv_attention(
         scale=scale,
         op=attn_op,
     )
-    torch.cuda.synchronize()
+    torch.npu.synchronize()
     start_time = time.time()
     output_ref = xops.memory_efficient_attention_forward(
         query,
@@ -234,7 +235,7 @@ def test_contexted_kv_attention(
         scale=scale,
         op=attn_op,
     )
-    torch.cuda.synchronize()
+    torch.npu.synchronize()
     end_time = time.time()
     print(f"xformers Time: {(end_time - start_time)*1000:.2f} ms")
     output_ref = output_ref.reshape(output.shape)
@@ -273,7 +274,7 @@ def test_contexted_kv_attention_alibi(
     # for GPU 1 would run on both GPU0 and GPU1 and things would hang
     #
     # see also similar issue: https://github.com/Dao-AILab/flash-attention/issues/523
-    torch.cuda.set_device(device)
+    torch.npu.set_device(device)
 
     def _get_alibi_slopes(total_num_heads: int) -> torch.Tensor:
         # Fork from: vllm/vllm/model_executor/models/bloom.py#L44
@@ -401,7 +402,7 @@ def test_contexted_kv_attention_alibi(
        k_scale,
        v_scale,
        alibi_slopes=alibi_slopes)
-    torch.cuda.synchronize()
+    torch.npu.synchronize()
     start_time = time.time()
     op(query,
        k,
@@ -417,7 +418,7 @@ def test_contexted_kv_attention_alibi(
        k_scale,
        v_scale,
        alibi_slopes=alibi_slopes)
-    torch.cuda.synchronize()
+    torch.npu.synchronize()
     end_time = time.time()
     print(f"triton Time: {(end_time - start_time)*1000:.2f} ms")
     scale = float(1.0 / (head_size**0.5))
@@ -493,7 +494,7 @@ def test_contexted_kv_attention_alibi(
                                                          ...])
         seq_start += seq_len
         query_start += query_len
-    torch.cuda.synchronize()
+    torch.npu.synchronize()
     end_time = time.time()
     print(f"xformers Time: {(end_time - start_time)*1000:.2f} ms")
     atol = 1e-3 if "fp8" in kv_cache_dtype else 1e-6
