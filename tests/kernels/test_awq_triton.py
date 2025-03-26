@@ -5,12 +5,13 @@ Run `pytest tests/kernels/test_awq_triton.py`.
 """
 import pytest
 import torch
+import torch_npu
 
 from vllm.model_executor.layers.quantization.awq_triton import (
     AWQ_TRITON_SUPPORTED_GROUP_SIZES, awq_dequantize_triton, awq_gemm_triton)
 from vllm.platforms import current_platform
 
-device = "cuda"
+device = "npu"
 
 
 def reverse_awq_order(t: torch.Tensor):

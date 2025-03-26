@@ -4,6 +4,7 @@ from typing import Optional
 
 import pytest
 import torch
+import torch_npu
 
 from vllm.platforms import current_platform
 from vllm.v1.attention.backends.flash_attn import (cascade_attention,
@@ -29,7 +30,7 @@ def test_merge_kernel(
     head_size: int,
     dtype: torch.dtype,
 ):
-    torch.set_default_device("cuda")
+    torch.set_default_device("npu")
     current_platform.seed_everything(0)
     num_query_heads = num_heads[0]
     num_kv_heads = num_heads[1]
@@ -94,7 +95,7 @@ def test_cascade(
     num_blocks: int,
     fa_version: int,
 ) -> None:
-    torch.set_default_device("cuda")
+    torch.set_default_device("npu")
     if not is_fa_version_supported(fa_version):
         pytest.skip(f"Flash attention version {fa_version} not supported due "
                     f"to: \"{fa_version_unsupported_reason(fa_version)}\"")
