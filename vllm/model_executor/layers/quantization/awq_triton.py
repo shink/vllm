@@ -4,7 +4,7 @@ import torch
 import triton
 import triton.language as tl
 
-AWQ_TRITON_SUPPORTED_GROUP_SIZES = [-1, 32, 64, 128]
+AWQ_TRITON_SUPPORTED_GROUP_SIZES = [-1, 32]
 
 
 @triton.jit

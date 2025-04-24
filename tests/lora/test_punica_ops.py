@@ -12,6 +12,13 @@ from vllm.platforms import current_platform
 
 from .utils import PunicaTensors, assert_close, generate_data_for_nslices
 
+try:
+    import torch_npu
+except ImportError:
+    pass
+
+device = "cuda" if torch.cuda.is_available() else "npu"
+
 
 @pytest.fixture(autouse=True)
 def reset_device(reset_default_device):
@@ -122,7 +129,7 @@ def check_lora_shrink_kernel(batches: int, num_loras: int, rank: int,
     # Setup metadata information for the LoRA kernel.
     lora_meta = LoRAKernelMeta.make(max_loras=num_loras,
                                     max_num_tokens=token_nums,
-                                    device='cuda')
+                                    device=device)
     lora_meta.prepare_tensors(data.token_lora_mapping)
 
     ref_out_tensor = data.ref_out_tensor
@@ -183,7 +190,7 @@ def check_lora_expand_kernel(batches: int, num_loras: int, rank: int,
     # Setup metadata information for the LoRA kernel.
     lora_meta = LoRAKernelMeta.make(max_loras=num_loras,
                                     max_num_tokens=token_nums,
-                                    device='cuda')
+                                    device=device)
     lora_meta.prepare_tensors(data.token_lora_mapping)
 
     # Setup output tensors
@@ -326,7 +333,7 @@ test_params = {
 }
 
 DTYPES = [torch.float16, torch.bfloat16]
-DEVICES = [f"cuda:{0}"]
+DEVICES = [f"{device}:{0}"]
 SEED = [0]
 
 

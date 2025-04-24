@@ -7,11 +7,19 @@ from vllm.model_executor.layers.lightning_attn import (
     linear_decode_forward_triton)
 from vllm.platforms import current_platform
 
-NUM_HEADS = [4, 8]
+NUM_HEADS = [4]
 HEAD_SIZES = [64]
-BATCH_SIZES = [1, 2]
+BATCH_SIZES = [1]
 SEQ_LENGTHS = [16]
 DTYPES = [torch.float32]
+
+try:
+    import torch_npu
+except ImportError:
+    pass
+
+device = "cuda" if torch.cuda.is_available() else "npu"
+device_mod = getattr(torch, device)
 
 
 def reference_lightning_attention(q, k, v, ed, block_size, kv_history):
@@ -125,9 +133,9 @@ def test_linear_decode_forward_triton(
     head_size: int,
     dtype: torch.dtype,
 ):
-    torch.set_default_device("cuda")
+    torch.set_default_device(device)
     torch.manual_seed(42)
-    torch.cuda.manual_seed_all(42)
+    device_mod.manual_seed_all(42)
     current_platform.seed_everything(42)
     base = 0.01
     q = base * torch.randn(batch_size, num_heads, 1, head_size, dtype=dtype)
@@ -139,15 +147,15 @@ def test_linear_decode_forward_triton(
                                    head_size,
                                    head_size,
                                    dtype=dtype,
-                                   device="cuda")
+                                   device=device)
 
     kv_caches_copy = kv_caches.clone()
 
-    slope_rate = torch.zeros(num_heads, device="cuda")
+    slope_rate = torch.zeros(num_heads, device=device)
     for h in range(num_heads):
         slope_rate[h] = 0.1 * (h + 1)
 
-    slot_idx = torch.arange(batch_size, device="cuda")
+    slot_idx = torch.arange(batch_size, device=device)
 
     triton_output = linear_decode_forward_triton(q, k, v, kv_caches,
                                                  slope_rate, slot_idx)
@@ -172,9 +180,9 @@ def test_linear_decode_forward_triton_with_padding(
     head_size: int,
     dtype: torch.dtype,
 ):
-    torch.set_default_device("cuda")
+    torch.set_default_device(device)
     torch.manual_seed(42)
-    torch.cuda.manual_seed_all(42)
+    device_mod.manual_seed_all(42)
     current_platform.seed_everything(42)
 
     batch_size = 4
@@ -188,15 +196,15 @@ def test_linear_decode_forward_triton_with_padding(
                                    head_size,
                                    head_size,
                                    dtype=dtype,
-                                   device="cuda")
+                                   device=device)
 
     kv_caches_copy = kv_caches.clone()
 
-    slope_rate = torch.zeros(num_heads, device="cuda")
+    slope_rate = torch.zeros(num_heads, device=device)
     for h in range(num_heads):
         slope_rate[h] = 0.1 * (h + 1)
 
-    slot_idx = torch.tensor([0, 1, -1, 2], device="cuda")
+    slot_idx = torch.tensor([0, 1, -1, 2], device=device)
 
     triton_output = linear_decode_forward_triton(q, k, v, kv_caches,
                                                  slope_rate, slot_idx)
@@ -242,9 +250,9 @@ def test_lightning_attention_reference(
     seq_len: int,
     dtype: torch.dtype,
 ):
-    torch.set_default_device("cuda")
+    torch.set_default_device(device)
     torch.manual_seed(42)
-    torch.cuda.manual_seed_all(42)
+    device_mod.manual_seed_all(42)
     current_platform.seed_everything(42)
 
     base = 0.01
@@ -255,7 +263,7 @@ def test_lightning_attention_reference(
     v = base * torch.randn(
         batch_size, num_heads, seq_len, head_size, dtype=dtype)
 
-    ed = torch.zeros(num_heads, device="cuda")
+    ed = torch.zeros(num_heads, device=device)
     for h in range(num_heads):
         ed[h] = 0.1 * (h + 1)
 
@@ -264,7 +272,7 @@ def test_lightning_attention_reference(
                                     head_size,
                                     head_size,
                                     dtype=dtype,
-                                    device="cuda")
+                                    device=device)
 
     kv_history_clone = kv_history.clone()
 

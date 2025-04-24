@@ -17,6 +17,13 @@ HEAD_SIZES = [128, 192, 256]
 BLOCK_SIZES = [16]
 DTYPES = [torch.float16, torch.bfloat16]
 
+try:
+    import torch_npu
+except ImportError:
+    pass
+
+device = "cuda" if torch.cuda.is_available() else "npu"
+
 
 @pytest.mark.parametrize("num_tokens", [1, 39, 16912])
 @pytest.mark.parametrize("num_heads", NUM_HEADS)
@@ -29,7 +36,7 @@ def test_merge_kernel(
     head_size: int,
     dtype: torch.dtype,
 ):
-    torch.set_default_device("cuda")
+    torch.set_default_device(device)
     current_platform.seed_everything(0)
     num_query_heads = num_heads[0]
     num_kv_heads = num_heads[1]
@@ -94,7 +101,7 @@ def test_cascade(
     num_blocks: int,
     fa_version: int,
 ) -> None:
-    torch.set_default_device("cuda")
+    torch.set_default_device(device)
     if not is_fa_version_supported(fa_version):
         pytest.skip(f"Flash attention version {fa_version} not supported due "
                     f"to: \"{fa_version_unsupported_reason(fa_version)}\"")

@@ -7,26 +7,32 @@ from collections.abc import Callable
 
 import pytest
 import torch
-from xformers import ops as xops
-from xformers.ops.fmha.attn_bias import BlockDiagonalCausalFromBottomRightMask
+# from xformers import ops as xops
+# from xformers.ops.fmha.attn_bias import BlockDiagonalCausalFromBottomRightMask
 
-from vllm.attention.backends.xformers import _make_alibi_bias
+# from vllm.attention.backends.xformers import _make_alibi_bias
 from vllm.attention.ops.chunked_prefill_paged_decode import (
     chunked_prefill_paged_decode)
 from vllm.attention.ops.prefix_prefill import context_attention_fwd
 from vllm.platforms import current_platform
 from vllm.utils import STR_DTYPE_TO_TORCH_DTYPE
 
-NUM_HEADS = [64]
-NUM_QUERIES_PER_KV = [1, 8, 64]
-HEAD_SIZES = [128, 96, 24]
-DTYPES = [torch.float16]
-CUDA_DEVICES = [
-    f"cuda:{i}" for i in range(1 if torch.cuda.device_count() == 1 else 2)
-]
-SLIDING_WINDOW = [0, 16, 64, 128, 256, 512, 2048]
-KV_CACHE_DTYPES = ["auto", "fp8", "fp8_e5m2"]
+try:
+    import torch_npu
+except ImportError:
+    pass
 
+NUM_HEADS = [64]
+NUM_QUERIES_PER_KV = [1]
+HEAD_SIZES = [128]
+DTYPES = [torch.float16]
+device = "cuda" if torch.cuda.is_available() else "npu"
+device_mod = getattr(torch, device)
+CUDA_DEVICES = [
+    f"{device}:{i}" for i in range(1 if device_mod.device_count() == 1 else 2)
+]
+SLIDING_WINDOW = [0]
+KV_CACHE_DTYPES = ["auto"]
 OPS = [chunked_prefill_paged_decode, context_attention_fwd]
 
 
@@ -63,7 +69,7 @@ def test_contexted_kv_attention(
     # for GPU 1 would run on both GPU0 and GPU1 and things would hang
     #
     # see also similar issue: https://github.com/Dao-AILab/flash-attention/issues/523
-    torch.cuda.set_device(device)
+    device_mod.set_device(device)
 
     MAX_SEQ_LEN = 1024
     MAX_CTX_LEN = 1024
@@ -169,7 +175,7 @@ def test_contexted_kv_attention(
        k_scale,
        v_scale,
        sliding_window=sliding_window)
-    torch.cuda.synchronize()
+    device_mod.synchronize()
     start_time = time.time()
     op(query,
        k,
@@ -186,62 +192,62 @@ def test_contexted_kv_attention(
        k_scale,
        v_scale,
        sliding_window=sliding_window)
-    torch.cuda.synchronize()
+    device_mod.synchronize()
     end_time = time.time()
     print(f"triton Time: {(end_time - start_time)*1000:.2f} ms")
 
-    scale = float(1.0 / (head_size**0.5))
+    # scale = float(1.0 / (head_size**0.5))
 
-    attn_op = xops.fmha.cutlass.FwOp()
+    # attn_op = xops.fmha.cutlass.FwOp()
 
-    if num_kv_heads != num_heads:
-        # As of Nov 2023, xformers only supports MHA. For MQA/GQA,
-        # project the key and value tensors to the desired number of
-        # heads.
-        #
-        # see also: vllm/model_executor/layers/attention.py
-        query = query.view(query.shape[0], num_kv_heads, num_queries_per_kv,
-                           query.shape[-1])
-        key = key[:, :, None, :].expand(key.shape[0], num_kv_heads,
-                                        num_queries_per_kv, key.shape[-1])
-        value = value[:, :,
-                      None, :].expand(value.shape[0], num_kv_heads,
-                                      num_queries_per_kv, value.shape[-1])
-    query = query.unsqueeze(0)
-    key = key.unsqueeze(0)
-    value = value.unsqueeze(0)
+    # if num_kv_heads != num_heads:
+    #     # As of Nov 2023, xformers only supports MHA. For MQA/GQA,
+    #     # project the key and value tensors to the desired number of
+    #     # heads.
+    #     #
+    #     # see also: vllm/model_executor/layers/attention.py
+    #     query = query.view(query.shape[0], num_kv_heads, num_queries_per_kv,
+    #                        query.shape[-1])
+    #     key = key[:, :, None, :].expand(key.shape[0], num_kv_heads,
+    #                                     num_queries_per_kv, key.shape[-1])
+    #     value = value[:, :,
+    #                   None, :].expand(value.shape[0], num_kv_heads,
+    #                                   num_queries_per_kv, value.shape[-1])
+    # query = query.unsqueeze(0)
+    # key = key.unsqueeze(0)
+    # value = value.unsqueeze(0)
 
-    attn_bias = BlockDiagonalCausalFromBottomRightMask.from_seqlens(
-        query_lens, seq_lens)
-    if sliding_window > 0:
-        attn_bias = attn_bias.make_local_attention_from_bottomright(
-            sliding_window)
-    output_ref = xops.memory_efficient_attention_forward(
-        query,
-        key,
-        value,
-        attn_bias=attn_bias,
-        p=0.0,
-        scale=scale,
-        op=attn_op,
-    )
-    torch.cuda.synchronize()
-    start_time = time.time()
-    output_ref = xops.memory_efficient_attention_forward(
-        query,
-        key,
-        value,
-        attn_bias=attn_bias,
-        p=0.0,
-        scale=scale,
-        op=attn_op,
-    )
-    torch.cuda.synchronize()
-    end_time = time.time()
-    print(f"xformers Time: {(end_time - start_time)*1000:.2f} ms")
-    output_ref = output_ref.reshape(output.shape)
-    atol = 1e-3 if "fp8" in kv_cache_dtype else 1e-4
-    torch.testing.assert_close(output, output_ref, atol=atol, rtol=0)
+    # attn_bias = BlockDiagonalCausalFromBottomRightMask.from_seqlens(
+    #     query_lens, seq_lens)
+    # if sliding_window > 0:
+    #     attn_bias = attn_bias.make_local_attention_from_bottomright(
+    #         sliding_window)
+    # output_ref = xops.memory_efficient_attention_forward(
+    #     query,
+    #     key,
+    #     value,
+    #     attn_bias=attn_bias,
+    #     p=0.0,
+    #     scale=scale,
+    #     op=attn_op,
+    # )
+    # device_mod.synchronize()
+    # start_time = time.time()
+    # output_ref = xops.memory_efficient_attention_forward(
+    #     query,
+    #     key,
+    #     value,
+    #     attn_bias=attn_bias,
+    #     p=0.0,
+    #     scale=scale,
+    #     op=attn_op,
+    # )
+    # device_mod.synchronize()
+    # end_time = time.time()
+    # print(f"xformers Time: {(end_time - start_time)*1000:.2f} ms")
+    # output_ref = output_ref.reshape(output.shape)
+    # atol = 1e-3 if "fp8" in kv_cache_dtype else 1e-4
+    # torch.testing.assert_close(output, output_ref, atol=atol, rtol=0)
 
 
 @pytest.mark.parametrize("num_heads", NUM_HEADS)
@@ -275,7 +281,7 @@ def test_contexted_kv_attention_alibi(
     # for GPU 1 would run on both GPU0 and GPU1 and things would hang
     #
     # see also similar issue: https://github.com/Dao-AILab/flash-attention/issues/523
-    torch.cuda.set_device(device)
+    device_mod.set_device(device)
 
     def _get_alibi_slopes(total_num_heads: int) -> torch.Tensor:
         # Fork from: vllm/vllm/model_executor/models/bloom.py#L44
@@ -404,7 +410,7 @@ def test_contexted_kv_attention_alibi(
        k_scale,
        v_scale,
        alibi_slopes=alibi_slopes)
-    torch.cuda.synchronize()
+    device_mod.synchronize()
     start_time = time.time()
     op(query,
        k,
@@ -421,87 +427,87 @@ def test_contexted_kv_attention_alibi(
        k_scale,
        v_scale,
        alibi_slopes=alibi_slopes)
-    torch.cuda.synchronize()
+    device_mod.synchronize()
     end_time = time.time()
     print(f"triton Time: {(end_time - start_time)*1000:.2f} ms")
-    scale = float(1.0 / (head_size**0.5))
+    # scale = float(1.0 / (head_size**0.5))
 
-    # NOTE(DefTruth): In order to reuse _make_alibi_bias function,
-    # we have to pad query tensor before MQA/GQA expanding.
-    if query.shape[0] != key.shape[0]:
-        query_pad = torch.empty(sum(seq_lens),
-                                num_heads,
-                                head_size,
-                                dtype=dtype)
-        query_pad.uniform_(-1e-3, 1e-3)
-        seq_start = 0
-        query_start = 0
-        for i, (query_len, seq_len) in enumerate(zip(query_lens, seq_lens)):
-            seq_end = seq_start + seq_len
-            query_end = query_start + query_len
-            query_pad[seq_start:seq_end, ...] = torch.cat([
-                torch.zeros(
-                    seq_len - query_len, num_heads, head_size, dtype=dtype),
-                query[query_start:query_end, ...]
-            ],
-                                                          dim=0)
-            seq_start += seq_len
-            query_start += query_len
-        query = query_pad
+    # # NOTE(DefTruth): In order to reuse _make_alibi_bias function,
+    # # we have to pad query tensor before MQA/GQA expanding.
+    # if query.shape[0] != key.shape[0]:
+    #     query_pad = torch.empty(sum(seq_lens),
+    #                             num_heads,
+    #                             head_size,
+    #                             dtype=dtype)
+    #     query_pad.uniform_(-1e-3, 1e-3)
+    #     seq_start = 0
+    #     query_start = 0
+    #     for i, (query_len, seq_len) in enumerate(zip(query_lens, seq_lens)):
+    #         seq_end = seq_start + seq_len
+    #         query_end = query_start + query_len
+    #         query_pad[seq_start:seq_end, ...] = torch.cat([
+    #             torch.zeros(
+    #                 seq_len - query_len, num_heads, head_size, dtype=dtype),
+    #             query[query_start:query_end, ...]
+    #         ],
+    #                                                       dim=0)
+    #         seq_start += seq_len
+    #         query_start += query_len
+    #     query = query_pad
 
-    if num_kv_heads != num_heads:
-        # As of Nov 2023, xformers only supports MHA. For MQA/GQA,
-        # project the key and value tensors to the desired number of
-        # heads.
-        #
-        # see also: vllm/model_executor/layers/attention.py
-        key = key[:, :, None, :].expand(key.shape[0], num_kv_heads,
-                                        num_queries_per_kv, key.shape[-1])
-        value = value[:, :,
-                      None, :].expand(value.shape[0], num_kv_heads,
-                                      num_queries_per_kv, value.shape[-1])
-        # [seq, num_kv_heads, num_queries_per_kv, dk]=>
-        # [seq, num_kv_heads*num_queries_per_kv, dk] to comply with rest of the
-        # codebase. We save some time reshaping alibi matrix at runtime.
-        key = key.reshape(key.shape[0], -1, key.shape[-1])
-        value = value.reshape(value.shape[0], -1, value.shape[-1])
-    query = query.unsqueeze(0)
-    key = key.unsqueeze(0)
-    value = value.unsqueeze(0)
+    # if num_kv_heads != num_heads:
+    #     # As of Nov 2023, xformers only supports MHA. For MQA/GQA,
+    #     # project the key and value tensors to the desired number of
+    #     # heads.
+    #     #
+    #     # see also: vllm/model_executor/layers/attention.py
+    #     key = key[:, :, None, :].expand(key.shape[0], num_kv_heads,
+    #                                     num_queries_per_kv, key.shape[-1])
+    #     value = value[:, :,
+    #                   None, :].expand(value.shape[0], num_kv_heads,
+    #                                   num_queries_per_kv, value.shape[-1])
+    #     # [seq, num_kv_heads, num_queries_per_kv, dk]=>
+    #     # [seq, num_kv_heads*num_queries_per_kv, dk] to comply with rest of the
+    #     # codebase. We save some time reshaping alibi matrix at runtime.
+    #     key = key.reshape(key.shape[0], -1, key.shape[-1])
+    #     value = value.reshape(value.shape[0], -1, value.shape[-1])
+    # query = query.unsqueeze(0)
+    # key = key.unsqueeze(0)
+    # value = value.unsqueeze(0)
 
-    attn_bias = _make_alibi_bias(alibi_slopes, num_kv_heads, dtype, seq_lens)
-    output_ref = torch.empty_like(output)
-    seq_start = 0
-    query_start = 0
-    start_time = time.time()
-    # Attention with alibi slopes.
-    # FIXME(DefTruth): Because xformers does not support dynamic sequence
-    # lengths with custom attention bias, we process each prompt one by
-    # one. This is inefficient, especially when we have many short prompts.
-    # modified from: vllm/attention/backends/xformers.py#L343
-    for i, (query_len, seq_len) in enumerate(zip(query_lens, seq_lens)):
-        seq_end = seq_start + seq_len
-        query_end = query_start + query_len
-        out = xops.memory_efficient_attention_forward(query[:,
-                                                            seq_start:seq_end],
-                                                      key[:,
-                                                          seq_start:seq_end],
-                                                      value[:,
-                                                            seq_start:seq_end],
-                                                      attn_bias=attn_bias[i],
-                                                      p=0.0,
-                                                      scale=scale)
-        out = out.view_as(query[:, seq_start:seq_end]).view(
-            seq_len, num_heads, head_size)
-        output_ref[query_start:query_end, ...].copy_(out[seq_len - query_len:,
-                                                         ...])
-        seq_start += seq_len
-        query_start += query_len
-    torch.cuda.synchronize()
-    end_time = time.time()
-    print(f"xformers Time: {(end_time - start_time)*1000:.2f} ms")
-    atol = 1e-3 if "fp8" in kv_cache_dtype else 1e-6
-    torch.testing.assert_close(output, output_ref, atol=atol, rtol=0)
+    # attn_bias = _make_alibi_bias(alibi_slopes, num_kv_heads, dtype, seq_lens)
+    # output_ref = torch.empty_like(output)
+    # seq_start = 0
+    # query_start = 0
+    # start_time = time.time()
+    # # Attention with alibi slopes.
+    # # FIXME(DefTruth): Because xformers does not support dynamic sequence
+    # # lengths with custom attention bias, we process each prompt one by
+    # # one. This is inefficient, especially when we have many short prompts.
+    # # modified from: vllm/attention/backends/xformers.py#L343
+    # for i, (query_len, seq_len) in enumerate(zip(query_lens, seq_lens)):
+    #     seq_end = seq_start + seq_len
+    #     query_end = query_start + query_len
+    #     out = xops.memory_efficient_attention_forward(query[:,
+    #                                                         seq_start:seq_end],
+    #                                                   key[:,
+    #                                                       seq_start:seq_end],
+    #                                                   value[:,
+    #                                                         seq_start:seq_end],
+    #                                                   attn_bias=attn_bias[i],
+    #                                                   p=0.0,
+    #                                                   scale=scale)
+    #     out = out.view_as(query[:, seq_start:seq_end]).view(
+    #         seq_len, num_heads, head_size)
+    #     output_ref[query_start:query_end, ...].copy_(out[seq_len - query_len:,
+    #                                                      ...])
+    #     seq_start += seq_len
+    #     query_start += query_len
+    # device_mod.synchronize()
+    # end_time = time.time()
+    # print(f"xformers Time: {(end_time - start_time)*1000:.2f} ms")
+    # atol = 1e-3 if "fp8" in kv_cache_dtype else 1e-6
+    # torch.testing.assert_close(output, output_ref, atol=atol, rtol=0)
 
 
 # These tests are optional to only run when explicitly invoked

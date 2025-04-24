@@ -1,3 +1,48 @@
+# Test triton ops in vLLM
+
+## Env
+
+```
+torch                             2.3.1
+torch-npu                         2.3.1.post2
+inductor_npu                      0.1
+triton-ascend                     36969dafdad51877233f6adb2c077212d5058f1d
+```
+
+## Rport
+
+See [triton-ascend.md](./triton-ascend.md)
+
+## Run tests
+
+```bash
+# Clone this repo
+git clone https://github.com/shink/vllm.git -b jyh/triton
+cd vllm/
+
+# Install dependencies
+pip install -r requirements/common.txt
+pip install xformers
+pip install ninja cmake wheel pybind11
+pip install attrs==24.2.0 numpy==1.26.4 scipy==1.13.1 decorator==5.1.1 psutil==6.0.0 \
+    pytest==8.3.2 pytest-xdist==3.6.1 pyyaml \
+    torch==2.3.1 torch-npu==2.3.1.post2
+
+# Run tests
+./test-triton.sh
+```
+
+## Error message
+
+Will get `<Signals.SIGABRT: 6>`:
+
+```
+E subprocess.CalledProcessError: Command '['/home/devuser/workspace/ascend/triton-ascend/triton/python/triton/backends/huawei/triton-adapter-opt', '/tmp/tmpor8mf2dn/kernel.ttir.mlir', '--triton-to-linalg=global-kernel=false named-ops=True', '-o', '/tmp/tmpor8mf2dn/kernel.ttadapter.mlir']' died with <Signals.SIGABRT: 6>.
+```
+
+<details>
+<summary>Original README</summary>
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vllm-project/vllm/main/docs/source/assets/logos/vllm-logo-text-dark.png">
@@ -161,3 +206,5 @@ If you use vLLM for your research, please cite our [paper](https://arxiv.org/abs
 ## Media Kit
 
 - If you wish to use vLLM's logo, please refer to [our media kit repo](https://github.com/vllm-project/media-kit).
+
+</details>

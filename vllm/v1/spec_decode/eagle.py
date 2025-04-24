@@ -22,17 +22,18 @@ class EagleProposer:
         vllm_config: VllmConfig,
         device: torch.device,
     ):
-        self.vllm_config = vllm_config
-        self.num_speculative_tokens = (
-            vllm_config.speculative_config.num_speculative_tokens)
-        self.max_model_len = vllm_config.model_config.max_model_len
-        self.block_size = vllm_config.cache_config.block_size
-        # We need +1 here because the arange is used to set query_start_loc,
-        # which has one more element than batch_size.
-        self.arange = torch.arange(vllm_config.scheduler_config.max_num_seqs +
-                                   1,
-                                   device=device,
-                                   dtype=torch.int32)
+        pass
+        # self.vllm_config = vllm_config
+        # self.num_speculative_tokens = (
+        #     vllm_config.speculative_config.num_speculative_tokens)
+        # self.max_model_len = vllm_config.model_config.max_model_len
+        # self.block_size = vllm_config.cache_config.block_size
+        # # We need +1 here because the arange is used to set query_start_loc,
+        # # which has one more element than batch_size.
+        # self.arange = torch.arange(vllm_config.scheduler_config.max_num_seqs +
+        #                            1,
+        #                            device=device,
+        #                            dtype=torch.int32)
 
     def propose(
         self,

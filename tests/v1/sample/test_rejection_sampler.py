@@ -10,7 +10,12 @@ from vllm.v1.sample.rejection_sampler import (PLACEHOLDER_TOKEN_ID,
                                               RejectionSampler)
 from vllm.v1.spec_decode.metadata import SpecDecodeMetadata
 
-DEVICE = "cuda"
+try:
+    import torch_npu
+except ImportError:
+    pass
+
+DEVICE = "cuda" if torch.cuda.is_available() else "npu"
 
 
 @pytest.fixture

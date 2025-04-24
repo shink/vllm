@@ -9,6 +9,11 @@ import torch
 import triton
 import triton.language as tl
 
+try:
+    import torch_npu
+except ImportError:
+    pass
+
 
 @triton.autotune(
     configs=[
@@ -167,7 +172,9 @@ def _state_passing_fwd(
                                device=states.device,
                                dtype=torch.float32)
     grid = lambda META: (triton.cdiv(dim, META['BLOCK_SIZE']), batch, nheads)
-    with torch.cuda.device(states.device.index):
+    device = "cuda" if torch.cuda.is_available() else "npu"
+    device_mod = getattr(torch, device)
+    with device_mod.device(states.device.index):
         _state_passing_fwd_kernel[grid](
             states,
             out,

@@ -104,6 +104,8 @@ def use_rocm_custom_paged_attention(qtype: torch.dtype, head_size: int,
                                     max_seq_len: int,
                                     sliding_window: int) -> bool:
 
+    if not torch.cuda.is_available():
+        return False
     GPU_ARCH = torch.cuda.get_device_properties("cuda").gcnArchName
     ON_NAVI = "gfx1" in GPU_ARCH
     ON_MI250_MI300 = any(arch in GPU_ARCH for arch in ["gfx90a", "gfx942"])

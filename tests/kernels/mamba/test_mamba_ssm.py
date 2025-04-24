@@ -12,6 +12,13 @@ from vllm.model_executor.layers.mamba.ops.mamba_ssm import (
     selective_scan_fn, selective_state_update)
 from vllm.platforms import current_platform
 
+try:
+    import torch_npu
+except ImportError:
+    pass
+
+device = "cuda" if torch.cuda.is_available() else "npu"
+
 
 def selective_state_update_ref(state,
                                x,
@@ -228,7 +235,6 @@ def test_selective_scan(is_variable_B, is_variable_C, varBC_groups, has_D,
                         wtype, scan_chunks):
     if varBC_groups > 1 and (not is_variable_B or not is_variable_C):
         pytest.skip()  # This config is not applicable
-    device = 'cuda'
     rtol, atol = (6e-4, 2e-3) if itype == torch.float32 else (3e-3, 5e-3)
     if itype == torch.bfloat16:
         rtol, atol = 3e-2, 5e-2
@@ -353,7 +359,6 @@ def test_selective_scan(is_variable_B, is_variable_C, varBC_groups, has_D,
 @pytest.mark.parametrize("dstate", [16, 32, 64])
 @pytest.mark.parametrize("dim", [2048, 2048 + 16, 4096])
 def test_selective_state_update(dim, dstate, has_z, itype):
-    device = "cuda"
     rtol, atol = (3e-4, 1e-3) if itype == torch.float32 else (5e-3, 1e-2)
     if itype == torch.bfloat16:
         rtol, atol = 1e-2, 5e-2
@@ -416,7 +421,6 @@ def test_selective_scan_varlen(with_padding, is_variable_B, is_variable_C,
                                itype, wtype):
     if varBC_groups > 1 and (not is_variable_B or not is_variable_C):
         pytest.skip()  # This config is not applicable
-    device = 'cuda'
     rtol, atol = (6e-4, 2e-3) if itype == torch.float32 else (3e-3, 5e-3)
     if itype == torch.bfloat16:
         rtol, atol = 3e-2, 5e-2
@@ -450,7 +454,7 @@ def test_selective_scan_varlen(with_padding, is_variable_B, is_variable_C,
     total_entries = batch_size * 10
     cumsum = torch.cumsum(torch.tensor(seqlens[0]), dim=0).to(torch.int32)
     cumsum = torch.concat([torch.tensor([0], dtype=torch.int32), cumsum],
-                          dim=0).cuda()
+                          dim=0).to(device=device)
 
     dim = 4
     dstate = 8
@@ -554,7 +558,6 @@ def test_selective_scan_varlen(with_padding, is_variable_B, is_variable_C,
 @pytest.mark.parametrize("with_padding", [True, False])
 def test_selective_state_update_with_batch_indices(with_padding, dim, dstate,
                                                    has_z, itype):
-    device = "cuda"
     rtol, atol = (3e-4, 1e-3) if itype == torch.float32 else (5e-3, 1e-2)
     if itype == torch.bfloat16:
         rtol, atol = 1e-1, 1e-1
@@ -643,7 +646,6 @@ def test_selective_state_update_with_batch_indices(with_padding, dim, dstate,
 @pytest.mark.parametrize("dim", [2048, 4096])
 def test_selective_state_update_with_heads_with_batch_indices(
         dim, dstate, ngroups, has_z, tie_hdim, itype):
-    device = "cuda"
     rtol, atol = (3e-4, 1e-3) if itype == torch.float32 else (5e-3, 3e-2)
     if itype == torch.bfloat16:
         rtol, atol = 1e-1, 1e-1
